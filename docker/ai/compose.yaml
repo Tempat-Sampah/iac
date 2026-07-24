@@ -2,6 +2,21 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/compose-spec/compose-spec/master/schema/compose-spec.json
 name: ollama
 services:
+  ollama:
+    image: mirror.gcr.io/ollama/ollama:0.32.3
+    container_name: ollama
+    restart: unless-stopped
+    volumes:
+      - ollama:/root/.ollama
+    ports:
+      - "11434:11434"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
   open-webui:
     image: ghcr.io/open-webui/open-webui:v0.10.2
     container_name: open-webui
@@ -23,18 +38,6 @@ services:
       - DATABASE_URL=$DATABASE_URL
     extra_hosts:
       - host.docker.internal:host-gateway
-  searxng:
-    image: searxng/searxng@sha256:252cfb5b348809167f5519970ca3457711e723afc76179a662b1c720cbbc1dd3
-    container_name: searxng
-    environment:
-      - PUID=${PUID:-1000}
-      - PGID=${PGID:-1000}
-    volumes:
-      - /etc/localtime:/etc/localtime:ro
-      - /docker/appdata/searxng:/etc/searxng
-    restart: unless-stopped
-    ports:
-      - "8081:8080"
 
   open-terminal:
     container_name: open-terminal
@@ -47,6 +50,39 @@ services:
     environment:
       - OPEN_TERMINAL_API_KEY=$OPEN_TERMINAL_API_KEY
       - OPEN_TERMINAL_MULTI_USER=true
+
+  litellm:
+    image: ghcr.io/berriai/litellm:v1.93.0
+    container_name: litellm
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    environment:
+      DATABASE_URL: postgresql://llmproxy:${LITELLM_DB_PASSWORD}@10.0.0.210:5432/litellm
+      STORE_MODEL_IN_DB: "True"
+      LITELLM_MASTER_KEY: $LITELLM_MASTER_KEY
+      LITELLM_SALT_KEY: $LITELLM_SALT_KEY
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:4000/health/liveliness')"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  searxng:
+    image: searxng/searxng@sha256:854f239d5c181db9c4282cd0ffc1737a61232dd6ad0ea964028b96df17d7758a
+    container_name: searxng
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /docker/appdata/searxng:/etc/searxng
+    restart: unless-stopped
+    ports:
+      - "8081:8080"
 
 volumes:
   open-terminal:
